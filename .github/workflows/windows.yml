@@ -17,7 +17,7 @@ jobs:
 
       - name: 2. Create Admin Account
         run: |
-          $Password = ConvertTo-SecureString "P@ssw0rd1qazXSW@#" -AsPlainText -Force
+          $Password = ConvertTo-SecureString "Nima090501" -AsPlainText -Force
           New-LocalUser -Name "Nima" -Password $Password -PasswordNeverExpires -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "Nima" -ErrorAction SilentlyContinue
           net user runneradmin Nima090501
