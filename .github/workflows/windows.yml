@@ -1,0 +1,101 @@
+name: Windows Cloud RDP
+
+on:
+  workflow_dispatch:
+    inputs:
+      chat_id:
+        description: "Telegram Chat ID"
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+
+      - name: Enable Remote Desktop
+        shell: powershell
+        run: |
+          Set-ItemProperty `
+            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+            -Name "fDenyTSConnections" `
+            -Value 0
+
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+      - name: Create Nima User
+        shell: powershell
+        run: |
+          $Password = ConvertTo-SecureString "Nima090501" -AsPlainText -Force
+
+          if (-not (Get-LocalUser -Name "Nima" -ErrorAction SilentlyContinue)) {
+              New-LocalUser `
+                -Name "Nima" `
+                -Password $Password `
+                -PasswordNeverExpires
+          }
+
+          Add-LocalGroupMember `
+            -Group "Administrators" `
+            -Member "Nima" `
+            -ErrorAction SilentlyContinue
+
+      - name: Install Tailscale
+        shell: powershell
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          Invoke-WebRequest `
+            "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
+            -OutFile "C:\tailscale.msi"
+
+          Start-Process msiexec.exe `
+            -ArgumentList "/i C:\tailscale.msi /quiet /norestart" `
+            -Wait
+
+          Start-Sleep -Seconds 2
+
+      - name: Connect Tailscale
+        shell: powershell
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" up `
+            --authkey="$Env:TAILSCALE_AUTHKEY" `
+            --hostname="github-windows-rdp"
+
+          $ts_ip = ""
+
+          for ($i = 1; $i -le 20; $i++) {
+              $ts_ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+
+              if ($ts_ip) {
+                  break
+              }
+
+              Start-Sleep -Seconds 1
+          }
+
+          if (-not $ts_ip) {
+              Write-Error "Tailscale IP was not obtained."
+              exit 1
+          }
+
+          Write-Host ""
+          Write-Host "================================"
+          Write-Host "WINDOWS RDP READY"
+          Write-Host "IP: $ts_ip"
+          Write-Host "User: Nima"
+          Write-Host "Password: Nima090501"
+          Write-Host "RDP Port: 3389"
+          Write-Host "================================"
+
+      - name: Keep Server Alive
+        shell: powershell
+        run: |
+          for ($i = 1; $i -le 330; $i++) {
+              Start-Sleep -Seconds 60
+              Write-Host "[$i/330] Windows server running..."
+          }
