@@ -1,0 +1,109 @@
+name: Ubuntu Terminal
+
+on:
+  workflow_dispatch:
+    inputs:
+      chat_id:
+        description: "Telegram Chat ID"
+        required: false
+        type: string
+
+jobs:
+  terminal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+
+      - name: Install Terminal Tools
+        shell: bash
+        run: |
+          sudo apt-get update
+
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            openssh-server \
+            curl \
+            wget \
+            git \
+            unzip \
+            zip \
+            python3 \
+            python3-pip \
+            python3-venv \
+            nodejs \
+            npm \
+            htop \
+            btop \
+            ncdu \
+            net-tools \
+            iproute2
+
+      - name: Create Nima User
+        shell: bash
+        run: |
+          if ! id Nima >/dev/null 2>&1; then
+            sudo useradd -m -s /bin/bash Nima
+          fi
+
+          echo 'Nima:Nima090501' | sudo chpasswd
+
+          sudo usermod -aG sudo Nima
+
+      - name: Start SSH
+        shell: bash
+        run: |
+          sudo mkdir -p /run/sshd
+
+          sudo systemctl enable ssh
+          sudo systemctl restart ssh
+
+      - name: Install Tailscale
+        shell: bash
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+
+      - name: Connect Tailscale
+        shell: bash
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          sudo tailscale up \
+            --authkey="$TAILSCALE_AUTHKEY" \
+            --hostname="github-ubuntu-terminal"
+
+          TS_IP=""
+
+          for i in $(seq 1 20); do
+            TS_IP=$(sudo tailscale ip -4 2>/dev/null || true)
+
+            if [ -n "$TS_IP" ]; then
+              break
+            fi
+
+            sleep 1
+          done
+
+          if [ -z "$TS_IP" ]; then
+            echo "Tailscale IP was not obtained."
+            exit 1
+          fi
+
+          echo ""
+          echo "================================"
+          echo "UBUNTU TERMINAL READY"
+          echo "IP: $TS_IP"
+          echo "User: Nima"
+          echo "Password: Nima090501"
+          echo "SSH Port: 22"
+          echo ""
+          echo "SSH COMMAND:"
+          echo "ssh Nima@$TS_IP"
+          echo "================================"
+
+      - name: Keep Server Alive
+        shell: bash
+        run: |
+          for i in $(seq 1 330); do
+            sleep 60
+            echo "[$i/330] Ubuntu Terminal running..."
+          done
