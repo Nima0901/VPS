@@ -1,0 +1,137 @@
+name: Ubuntu Cloud RDP
+
+on:
+  workflow_dispatch:
+    inputs:
+      chat_id:
+        description: "Telegram Chat ID"
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+
+      - name: Install Desktop and Tools
+        shell: bash
+        run: |
+          sudo apt-get update
+
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            xfce4 \
+            xfce4-terminal \
+            thunar \
+            mousepad \
+            xfce4-screenshooter \
+            xrdp \
+            xorgxrdp \
+            dbus-x11 \
+            pulseaudio \
+            pulseaudio-utils \
+            firefox \
+            vlc \
+            git \
+            curl \
+            wget \
+            unzip \
+            zip \
+            python3 \
+            python3-pip \
+            python3-venv \
+            nodejs \
+            npm \
+            openssh-client \
+            net-tools \
+            iproute2 \
+            htop \
+            btop \
+            ncdu \
+            build-essential
+
+      - name: Create Nima User
+        shell: bash
+        run: |
+          if ! id Nima >/dev/null 2>&1; then
+            sudo useradd -m -s /bin/bash Nima
+          fi
+
+          echo 'Nima:Nima090501' | sudo chpasswd
+
+          sudo usermod -aG sudo Nima
+
+          sudo bash -c 'cat > /home/Nima/.xsession << EOF
+          startxfce4
+          EOF'
+
+          sudo chown Nima:Nima /home/Nima/.xsession
+
+      - name: Configure XRDP
+        shell: bash
+        run: |
+          sudo adduser xrdp ssl-cert || true
+
+          sudo bash -c 'cat > /etc/xrdp/startwm.sh << "EOF"
+          #!/bin/sh
+
+          export LANG=C.UTF-8
+          export LC_ALL=C.UTF-8
+          export XDG_CURRENT_DESKTOP=XFCE
+
+          startxfce4
+          EOF'
+
+          sudo chmod +x /etc/xrdp/startwm.sh
+
+          sudo systemctl enable xrdp
+          sudo systemctl restart xrdp
+
+      - name: Install Tailscale
+        shell: bash
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+
+      - name: Connect Tailscale
+        shell: bash
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          sudo tailscale up \
+            --authkey="$TAILSCALE_AUTHKEY" \
+            --hostname="github-ubuntu-rdp"
+
+          TS_IP=""
+
+          for i in $(seq 1 20); do
+            TS_IP=$(sudo tailscale ip -4 2>/dev/null || true)
+
+            if [ -n "$TS_IP" ]; then
+              break
+            fi
+
+            sleep 1
+          done
+
+          if [ -z "$TS_IP" ]; then
+            echo "Tailscale IP was not obtained."
+            exit 1
+          fi
+
+          echo ""
+          echo "================================"
+          echo "UBUNTU RDP READY"
+          echo "IP: $TS_IP"
+          echo "User: Nima"
+          echo "Password: Nima090501"
+          echo "RDP Port: 3389"
+          echo "================================"
+
+      - name: Keep Server Alive
+        shell: bash
+        run: |
+          for i in $(seq 1 330); do
+            sleep 60
+            echo "[$i/330] Ubuntu RDP running..."
+          done
